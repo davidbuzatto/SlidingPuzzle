@@ -7,8 +7,12 @@ import br.com.davidbuzatto.jsge.image.Image;
 import br.com.davidbuzatto.jsge.image.ImageUtils;
 import br.com.davidbuzatto.jsge.math.MathUtils;
 import br.com.davidbuzatto.jsge.math.Vector2;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Sliding Puzzle.
@@ -17,8 +21,9 @@ import java.util.List;
  */
 public class GameWorld extends EngineFrame {
     
-    private static final int SIZE = 2;
-    private static final int SHUFFLE_COUNT = SIZE * SIZE * SIZE;
+    private static final int SIZE = 3;
+    //private static final int SHUFFLE_COUNT = SIZE * SIZE * SIZE;
+    private static final int SHUFFLE_COUNT = SIZE * SIZE;
     private static final boolean DRAW_VALUES = false;
     
     private static final int[] NEIGHBOR_ROWS = { 0, 1, 0, -1 };
@@ -37,8 +42,14 @@ public class GameWorld extends EngineFrame {
     private double xAnimEnd;
     private double yAnimEnd;
     private Piece movingPiece;
-    private double movePieceAnimationTime = 0.2;
-    private double movePieceAnimationCounter = 0.0;
+    private double movePieceAnimationTime;
+    private double movePieceAnimationCounter;
+    
+    private boolean stopSolving;
+    private Set<String> visitedStates;
+    private Deque<Vector2> solutionMoves;
+    private boolean runningSolution;
+    private int totalMovements;
     
     public GameWorld() {
         super( 600, 600, "Sliding Puzzle", 60, true );
@@ -52,6 +63,12 @@ public class GameWorld extends EngineFrame {
         fontSize = (int) ( pieceWidth / 2.5 );
         image = ImageUtils.loadImage( "resources/images/prof.png" );
         movingPiece = null;
+        movePieceAnimationTime = 0.2;
+        movePieceAnimationCounter = 0.0;
+        
+        visitedStates = new HashSet<>();
+        solutionMoves = new ArrayDeque<>();
+        runningSolution = false;
         
         for ( int i = 0; i < SIZE; i++ ) {
             for ( int j = 0; j < SIZE; j++ ) {
@@ -82,6 +99,13 @@ public class GameWorld extends EngineFrame {
                     }
                 }
             }
+            
+            if ( !solutionMoves.isEmpty() ) {
+                Vector2 pos = solutionMoves.removeFirst();
+                movePieceToEmptyPosUsingAnimation( (int) pos.y, (int) pos.x );
+            } else {
+                runningSolution = false;
+            }
         
         } else if ( state == GameState.MOVING ) {
             
@@ -105,11 +129,47 @@ public class GameWorld extends EngineFrame {
         }
         
         if ( isKeyPressed( KEY_R ) ) {
+            runningSolution = false;
+            solutionMoves.clear();
             do {
                 shufflePieces( SHUFFLE_COUNT );
                 state = GameState.PLAYING;
                 checkFinishedAndChangeState();
             } while ( state == GameState.FINISHED );
+        }
+        
+        if ( isKeyPressed( KEY_S ) ) {
+            
+            do {
+                shufflePieces( SHUFFLE_COUNT );
+                state = GameState.PLAYING;
+                checkFinishedAndChangeState();
+            } while ( state == GameState.FINISHED );
+            
+            // store current state
+            Piece[][] currentPieces = new Piece[SIZE][SIZE];
+            for ( int i = 0; i < SIZE; i++ ) {
+                for ( int j = 0; j < SIZE; j++ ) {
+                    currentPieces[i][j] = pieces[i][j];
+                }
+            }
+            
+            // solving...
+            solve();
+            
+            // restore state before solving
+            for ( int i = 0; i < SIZE; i++ ) {
+                for ( int j = 0; j < SIZE; j++ ) {
+                    if ( pieces[i][j] != null ) {
+                        pieces[i][j] = currentPieces[i][j];
+                        pieces[i][j].setPos( j * pieces[i][j].getDim().x, i * pieces[i][j].getDim().y );
+                    }
+                }
+            }
+            
+            totalMovements = solutionMoves.size();
+            runningSolution = true;
+            
         }
         
     }
@@ -164,6 +224,10 @@ public class GameWorld extends EngineFrame {
                 messageFontSize / 2, 
                 WHITE
             );
+        }
+        
+        if ( runningSolution ) {
+            drawText( String.format( "%d/%d", totalMovements - solutionMoves.size(), totalMovements ), 10, 10, 20, GREEN );
         }
     
     }
@@ -357,6 +421,93 @@ public class GameWorld extends EngineFrame {
         
         return true;
         
+    }
+    
+    private void solve() {
+        
+        stopSolving = false;
+        visitedStates.clear();
+        solutionMoves.clear();
+        
+        String initialState = getCurrentBoardState();
+        visitedStates.add( initialState );
+        
+        List<Vector2> candidates = getCandidatesToMove();
+        
+        for ( Vector2 c : candidates ) {
+            if ( solveRecurive( c ) ) {
+                stopSolving = true;
+                break;
+            }
+        }
+        
+    }
+    
+    private boolean solveRecurive( Vector2 pos ) {
+        
+        if ( stopSolving ) {
+            return false;
+        }
+        
+        // for backtracking
+        Vector2 backward = getEmptyPos( (int) pos.y, (int) pos.x );
+        
+        // move
+        movePieceToEmptyPos( (int) pos.y, (int) pos.x );
+        
+        // adds to the solutions (maybe will need to remove)
+        solutionMoves.addLast( pos );
+        
+        // get the current state
+        String currentState = getCurrentBoardState();
+        
+        // already visited?
+        if ( visitedStates.contains( currentState ) ) {
+            // undo movement
+            movePieceToEmptyPos( (int) backward.y, (int) backward.x );
+            solutionMoves.removeLast(); // the current pos is not correct
+            return false;
+        }
+        
+        // add state
+        visitedStates.add( currentState );
+        
+        // checks solution
+        if ( checkFinished() ) {
+            stopSolving = true;
+            return true;  // solution found!
+        }
+        
+        // recursion
+        List<Vector2> candidates = getCandidatesToMove();
+        for ( Vector2 c : candidates ) {
+            if ( solveRecurive( c ) ) {
+                return true; // solution found in a subproblem
+            }
+        }
+        
+        // backtracking
+        movePieceToEmptyPos( (int) backward.y, (int) backward.x );
+        visitedStates.remove( currentState );
+        solutionMoves.removeLast(); // the current pos is not correct
+        
+        // theres no path from here
+        return false;
+        
+    }
+    
+    private String getCurrentBoardState() {
+        StringBuilder sb = new StringBuilder();
+        for ( int i = 0; i < SIZE; i++ ) {
+            for ( int j = 0; j < SIZE; j++ ) {
+                if ( pieces[i][j] != null )  {
+                    sb.append( pieces[i][j].getValue() ).append( "," );
+                } else {
+                    sb.append( "null," );
+                }
+            }
+        }
+        return sb.toString();
     }
     
     public static void main( String[] args ) {

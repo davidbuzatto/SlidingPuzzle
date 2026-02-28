@@ -9,5 +9,6 @@ public enum GameState {
     START,
     PLAYING,
     MOVING,
+    RUNNING_SOLUTION_MOVES,
     FINISHED
 }
