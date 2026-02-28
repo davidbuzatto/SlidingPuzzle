@@ -1,4 +1,2 @@
-Melhorar GUI (desenho nos números e da grade);
 Adicionar animação na troca das peças;
 Melhorar o código;
-Implementar solução automática ou detecção que não há solução.

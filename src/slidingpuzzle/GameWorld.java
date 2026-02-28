@@ -1,10 +1,13 @@
 package slidingpuzzle;
 
 import br.com.davidbuzatto.jsge.core.engine.EngineFrame;
+import br.com.davidbuzatto.jsge.geom.Rectangle;
 import br.com.davidbuzatto.jsge.image.Image;
 import br.com.davidbuzatto.jsge.image.ImageUtils;
 import br.com.davidbuzatto.jsge.math.MathUtils;
 import br.com.davidbuzatto.jsge.math.Vector2;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Sliding Puzzle.
@@ -14,9 +17,17 @@ import br.com.davidbuzatto.jsge.math.Vector2;
 public class GameWorld extends EngineFrame {
     
     private static final int SIZE = 3;
+    private static final int SUFFLE_COUNT = SIZE * SIZE * SIZE;
+    private static final boolean DRAW_VALUES = false;
+    
     private Piece[][] pieces;
+    private int pieceWidth;
+    private int fontSize;
     private Image image;
     private boolean finished;
+    
+    private static final int[] NEIGHBOR_ROWS = { 0, 1, 0, -1 };
+    private static final int[] NEIGHBOR_COLS = { 1, 0, -1, 0 };
     
     public GameWorld() {
         super( 600, 600, "Sliding Puzzle", 60, true );
@@ -26,12 +37,13 @@ public class GameWorld extends EngineFrame {
     public void create() {
         
         pieces = new Piece[SIZE][SIZE];
-        int w = getScreenWidth() / SIZE;
+        pieceWidth = getScreenWidth() / SIZE;
+        fontSize = (int) ( pieceWidth / 2.5 );
         image = ImageUtils.loadImage( "resources/images/prof.png" );
         
         for ( int i = 0; i < SIZE; i++ ) {
             for ( int j = 0; j < SIZE; j++ ) {
-                pieces[i][j] = new Piece( i * SIZE + j, j * w, i * w, w, image );
+                pieces[i][j] = new Piece( i * SIZE + j, j * pieceWidth, i * pieceWidth, pieceWidth, image );
             }
         }
         
@@ -59,7 +71,7 @@ public class GameWorld extends EngineFrame {
         }
         
         if ( isKeyPressed( KEY_R ) ) {
-            shufflePieces();
+            shufflePieces( SUFFLE_COUNT );
             checkFinished();
         }
         
@@ -74,6 +86,24 @@ public class GameWorld extends EngineFrame {
             for ( int j = 0; j < SIZE; j++ ) {
                 if ( pieces[i][j] != null ) {
                     pieces[i][j].draw( this, SIZE );
+                }
+            }
+        }
+        
+        if ( DRAW_VALUES ) {
+            for ( int i = 0; i < SIZE; i++ ) {
+                for ( int j = 0; j < SIZE; j++ ) {
+                    Piece p = pieces[i][j];
+                    if ( p != null ) {
+                        Rectangle textBounds = measureTextBounds( p.getStringValue(), fontSize );
+                        drawText( 
+                            p.getStringValue(), 
+                            p.getPos().x + p.getDim().x / 2 - textBounds.width / 2, 
+                            p.getPos().y + p.getDim().y / 2 - textBounds.height / 4, 
+                            fontSize, 
+                            WHITE
+                        );
+                    }
                 }
             }
         }
@@ -105,16 +135,14 @@ public class GameWorld extends EngineFrame {
         
     }
     
+    // gets the empty pos based in a piece position
     private Vector2 getEmptyPos( int row, int col ) {
         
         Vector2 pos = new Vector2( -1, -1 );
         
-        int[] rows = { 0, 1, 0, -1 };
-        int[] cols = { 1, 0, -1, 0 };
-        
         for ( int i = 0; i < 4; i++ ) {
-            int r = row + cols[i];
-            int c = col + rows[i];
+            int r = row + NEIGHBOR_COLS[i];
+            int c = col + NEIGHBOR_ROWS[i];
             if ( r >= 0 && r < SIZE && c >= 0 && c < SIZE ) {
                 if ( pieces[r][c] == null ) {
                     pos.x = c;
@@ -128,7 +156,77 @@ public class GameWorld extends EngineFrame {
         
     }
     
-    private void shufflePieces() {
+    private Vector2 getEmptyPos() {
+        
+        int row = -1;
+        int col = -1;
+        
+        getNullPos:
+        for ( int i = 0; i < SIZE; i++ ) {
+            for ( int j = 0; j < SIZE; j++ ) {
+                if ( pieces[i][j] == null ) {
+                    row = i;
+                    col = j;
+                    break getNullPos;
+                }
+            }
+        }
+        
+        return new Vector2( col, row );
+        
+    }
+    
+    private List<Vector2> getCandidatesToMove() {
+        
+        List<Vector2> candidates = new ArrayList<>();
+        Vector2 nullPos = getEmptyPos();
+        int row = (int) nullPos.y;
+        int col = (int) nullPos.x;
+        
+        for ( int i = 0; i < 4; i++ ) {
+            int r = row + NEIGHBOR_COLS[i];
+            int c = col + NEIGHBOR_ROWS[i];
+            if ( r >= 0 && r < SIZE && c >= 0 && c < SIZE ) {
+                candidates.add( new Vector2( c, r ) );
+            }
+        }
+        
+        return candidates;
+        
+    }
+    
+    private void shufflePieces( int count ) {
+        
+        for ( int i = 0; i < count; i++ ) {
+            List<Vector2> candidates = getCandidatesToMove();
+            int p = MathUtils.getRandomValue( 0, candidates.size() - 1 );
+            Vector2 pp = candidates.get( p );
+            movePieceToEmptyPos( (int) pp.y, (int) pp.x );
+        }
+        
+        Vector2 nullPos = getEmptyPos();
+        int row = (int) nullPos.y;
+        int col = (int) nullPos.x;
+        
+        int qRow = SIZE - row - 1;
+        int qCol = SIZE - col - 1;
+        
+        //System.out.println( qRow );
+        //System.out.println( qCol );
+        
+        for ( int i = 0; i < qRow; i++ ) {
+            movePieceToEmptyPos( row + 1, col);
+            row++;
+        }
+        
+        for ( int i = 0; i < qCol; i++ ) {
+            movePieceToEmptyPos( row, col + 1 );
+            col++;
+        }
+        
+    }
+    
+    private void shufflePiecesMaybeUnsolvable() {
         
         for ( int i = 0; i < SIZE; i++ ) {
             for ( int j = 0; j < SIZE; j++ ) {

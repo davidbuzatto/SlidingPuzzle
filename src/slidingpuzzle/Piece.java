@@ -12,16 +12,12 @@ import java.awt.Color;
  */
 public class Piece {
     
-    private final int fontSize;
-    
     private int value;
     private Vector2 pos;
     private Vector2 dim;
     private Color color;
     private Image image;
-    
     private String stringValue;
-    private Rectangle textBounds;
     
     public Piece( int value, int x, int y, int w, Image image ) {
         
@@ -30,7 +26,6 @@ public class Piece {
         this.dim = new Vector2( w, w );
         this.color = EngineFrame.BLUE;
         this.image = image;
-        this.fontSize = (int) ( w / 2.5 );
         
         this.stringValue = String.valueOf( value );
         
@@ -46,16 +41,6 @@ public class Piece {
             EngineFrame.WHITE
         );
         
-        /*textBounds = e.measureTextBounds( stringValue, fontSize );
-        
-        e.drawText( 
-            stringValue, 
-            pos.x + dim.x / 2 - textBounds.width / 2, 
-            pos.y + dim.y / 2 - textBounds.height / 4, 
-            fontSize, 
-            EngineFrame.WHITE
-        );*/
-        
         e.drawRectangle( pos, dim, EngineFrame.BLACK );
         
     }
@@ -70,12 +55,20 @@ public class Piece {
         pos.y = y;
     }
     
+    public Vector2 getPos() {
+        return pos;
+    }
+    
     public Vector2 getDim() {
         return dim;
     }
     
     public int getValue() {
         return value;
+    }
+    
+    public String getStringValue() {
+        return stringValue;
     }
     
 }
