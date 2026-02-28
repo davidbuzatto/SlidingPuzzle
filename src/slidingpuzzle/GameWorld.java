@@ -1,6 +1,7 @@
 package slidingpuzzle;
 
 import br.com.davidbuzatto.jsge.core.engine.EngineFrame;
+import br.com.davidbuzatto.jsge.core.utils.ColorUtils;
 import br.com.davidbuzatto.jsge.geom.Rectangle;
 import br.com.davidbuzatto.jsge.image.Image;
 import br.com.davidbuzatto.jsge.image.ImageUtils;
@@ -16,18 +17,28 @@ import java.util.List;
  */
 public class GameWorld extends EngineFrame {
     
-    private static final int SIZE = 3;
+    private static final int SIZE = 10;
     private static final int SHUFFLE_COUNT = SIZE * SIZE * SIZE;
     private static final boolean DRAW_VALUES = false;
+    
+    private static final int[] NEIGHBOR_ROWS = { 0, 1, 0, -1 };
+    private static final int[] NEIGHBOR_COLS = { 1, 0, -1, 0 };
     
     private Piece[][] pieces;
     private int pieceWidth;
     private int fontSize;
     private Image image;
-    private boolean finished;
     
-    private static final int[] NEIGHBOR_ROWS = { 0, 1, 0, -1 };
-    private static final int[] NEIGHBOR_COLS = { 1, 0, -1, 0 };
+    private boolean finished;
+    private GameState state;
+    
+    private double xAnimStart;
+    private double yAnimStart;
+    private double xAnimEnd;
+    private double yAnimEnd;
+    private Piece movingPiece;
+    private double movePieceAnimationTime = 0.2;
+    private double movePieceAnimationCounter = 0.0;
     
     public GameWorld() {
         super( 600, 600, "Sliding Puzzle", 60, true );
@@ -40,6 +51,7 @@ public class GameWorld extends EngineFrame {
         pieceWidth = getScreenWidth() / SIZE;
         fontSize = (int) ( pieceWidth / 2.5 );
         image = ImageUtils.loadImage( "resources/images/prof.png" );
+        movingPiece = null;
         
         for ( int i = 0; i < SIZE; i++ ) {
             for ( int j = 0; j < SIZE; j++ ) {
@@ -48,31 +60,56 @@ public class GameWorld extends EngineFrame {
         }
         
         pieces[SIZE-1][SIZE-1] = null;
-        checkFinished();
-        
-        shufflePieces( SHUFFLE_COUNT );
+        state = GameState.START;
         
     }
     
     @Override
     public void update( double delta ) {
         
-        if ( isMouseButtonPressed( MOUSE_BUTTON_LEFT ) ) {
-            for ( int i = 0; i < SIZE; i++ ) {
-                for ( int j = 0; j < SIZE; j++ ) {
-                    if ( pieces[i][j] != null ) {
-                        if ( pieces[i][j].checkCollision( getMousePositionPoint() ) ) {
-                            movePieceToEmptyPos( i, j );
+        if ( state == GameState.PLAYING ) {
+            
+            if ( isMouseButtonPressed( MOUSE_BUTTON_LEFT ) ) {
+                search:
+                for ( int i = 0; i < SIZE; i++ ) {
+                    for ( int j = 0; j < SIZE; j++ ) {
+                        if ( pieces[i][j] != null ) {
+                            if ( pieces[i][j].checkCollision( getMousePositionPoint() ) ) {
+                                movePieceToEmptyPosUsingAnimation( i, j );
+                                break search;
+                            }
                         }
                     }
                 }
             }
-            checkFinished();
+        
+        } else if ( state == GameState.MOVING ) {
+            
+            if ( movingPiece != null ) {
+                
+                movePieceAnimationCounter += delta;
+                
+                double xAnim = MathUtils.lerp( xAnimStart, xAnimEnd, movePieceAnimationCounter / movePieceAnimationTime );
+                double yAnim = MathUtils.lerp( yAnimStart, yAnimEnd, movePieceAnimationCounter / movePieceAnimationTime );
+                movingPiece.setPos( xAnim, yAnim );
+                
+                if ( movePieceAnimationCounter >= movePieceAnimationTime ) {
+                    movePieceAnimationCounter = 0;
+                    movingPiece.setPos( xAnimEnd, yAnimEnd );
+                    state = GameState.PLAYING;
+                    checkFinished();
+                }
+                
+            }
+            
         }
         
         if ( isKeyPressed( KEY_R ) ) {
-            shufflePieces( SHUFFLE_COUNT );
-            checkFinished();
+            do {
+                shufflePieces( SHUFFLE_COUNT );
+                state = GameState.PLAYING;
+                checkFinished();
+            } while ( state == GameState.FINISHED );
         }
         
     }
@@ -108,12 +145,56 @@ public class GameWorld extends EngineFrame {
             }
         }
         
-        if ( finished ) {
-            drawText( "Finished!", 10, 10, 20, BLUE );
-        } else {
-            drawText( "Continue!", 10, 10, 20, RED );
+        if ( state == GameState.START || state == GameState.FINISHED ) {
+            fillRectangle( 0, 0, getScreenWidth(), getScreenHeight(), ColorUtils.fade( BLACK, 0.5 ) );
+            int messageFontSize = 60;
+            String wonMessage = state == GameState.FINISHED ? "You Won!" : "Let's Play!";
+            String restartMessage = state == GameState.FINISHED ? "Press <R> to Shuffle!" : "Press <R> to Start!";
+            drawText( 
+                wonMessage, 
+                getScreenWidth() / 2 - measureText( wonMessage, messageFontSize ) / 2, 
+                getScreenHeight() / 2 - messageFontSize / 2, 
+                messageFontSize, 
+                state == GameState.FINISHED ? BLUE : GREEN
+            );
+            drawText( 
+                restartMessage, 
+                getScreenWidth() / 2 - measureText( restartMessage, messageFontSize / 2 ) / 2, 
+                getScreenHeight() / 2 + messageFontSize / 2, 
+                messageFontSize / 2, 
+                WHITE
+            );
         }
     
+    }
+    
+    private void movePieceToEmptyPosUsingAnimation( int row, int col ) {
+        
+        Vector2 targetPos = getEmptyPos( row, col );
+        
+        int targetRow = (int) targetPos.y;
+        int targetCol = (int) targetPos.x;
+        
+        movingPiece = null;
+        
+        if ( targetRow != -1 ) {
+            
+            Piece p = pieces[row][col];
+            
+            pieces[targetRow][targetCol] = p;
+            pieces[row][col] = null;
+            
+            xAnimStart = col * p.getDim().x;
+            yAnimStart = row * p.getDim().y;
+            xAnimEnd = targetCol * p.getDim().x;
+            yAnimEnd = targetRow * p.getDim().y;
+            
+            movingPiece = p;
+            
+            state = GameState.MOVING;
+            
+        }
+        
     }
     
     private void movePieceToEmptyPos( int row, int col ) {
@@ -211,9 +292,6 @@ public class GameWorld extends EngineFrame {
         int qRow = SIZE - row - 1;
         int qCol = SIZE - col - 1;
         
-        //System.out.println( qRow );
-        //System.out.println( qCol );
-        
         for ( int i = 0; i < qRow; i++ ) {
             movePieceToEmptyPos( row + 1, col);
             row++;
@@ -262,7 +340,7 @@ public class GameWorld extends EngineFrame {
     
     private void checkFinished() {
         
-        finished = true;
+        boolean finished = true;
         int k = 0;
         
         for ( int i = 0; i < SIZE; i++ ) {
@@ -274,6 +352,8 @@ public class GameWorld extends EngineFrame {
                 k++;
             }
         }
+        
+        state = finished ? GameState.FINISHED : state;
         
     }
     

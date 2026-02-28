@@ -7,7 +7,8 @@ import br.com.davidbuzatto.jsge.math.Vector2;
 import java.awt.Color;
 
 /**
- *
+ * Represents a puzzle piece.
+ * 
  * @author Prof. Dr. David Buzatto
  */
 public class Piece {
@@ -69,6 +70,11 @@ public class Piece {
     
     public String getStringValue() {
         return stringValue;
+    }
+
+    @Override
+    public String toString() {
+        return "Piece{" + "value=" + value + ", pos=" + pos + '}';
     }
     
 }
