@@ -17,7 +17,7 @@ import java.util.List;
 public class GameWorld extends EngineFrame {
     
     private static final int SIZE = 3;
-    private static final int SUFFLE_COUNT = SIZE * SIZE * SIZE;
+    private static final int SHUFFLE_COUNT = SIZE * SIZE * SIZE;
     private static final boolean DRAW_VALUES = false;
     
     private Piece[][] pieces;
@@ -50,7 +50,7 @@ public class GameWorld extends EngineFrame {
         pieces[SIZE-1][SIZE-1] = null;
         checkFinished();
         
-        //shufflePieces();
+        shufflePieces( SHUFFLE_COUNT );
         
     }
     
@@ -71,7 +71,7 @@ public class GameWorld extends EngineFrame {
         }
         
         if ( isKeyPressed( KEY_R ) ) {
-            shufflePieces( SUFFLE_COUNT );
+            shufflePieces( SHUFFLE_COUNT );
             checkFinished();
         }
         
