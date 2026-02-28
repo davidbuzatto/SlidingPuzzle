@@ -7,10 +7,10 @@ import br.com.davidbuzatto.jsge.image.Image;
 import br.com.davidbuzatto.jsge.image.ImageUtils;
 import br.com.davidbuzatto.jsge.math.MathUtils;
 import br.com.davidbuzatto.jsge.math.Vector2;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
 
@@ -67,7 +67,7 @@ public class GameWorld extends EngineFrame {
         movePieceAnimationCounter = 0.0;
         
         visitedStates = new HashSet<>();
-        solutionMoves = new ArrayDeque<>();
+        solutionMoves = new LinkedList<>();
         runningSolution = false;
         
         for ( int i = 0; i < SIZE; i++ ) {
