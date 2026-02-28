@@ -17,7 +17,7 @@ import java.util.List;
  */
 public class GameWorld extends EngineFrame {
     
-    private static final int SIZE = 10;
+    private static final int SIZE = 2;
     private static final int SHUFFLE_COUNT = SIZE * SIZE * SIZE;
     private static final boolean DRAW_VALUES = false;
     
@@ -97,7 +97,7 @@ public class GameWorld extends EngineFrame {
                     movePieceAnimationCounter = 0;
                     movingPiece.setPos( xAnimEnd, yAnimEnd );
                     state = GameState.PLAYING;
-                    checkFinished();
+                    checkFinishedAndChangeState();
                 }
                 
             }
@@ -108,7 +108,7 @@ public class GameWorld extends EngineFrame {
             do {
                 shufflePieces( SHUFFLE_COUNT );
                 state = GameState.PLAYING;
-                checkFinished();
+                checkFinishedAndChangeState();
             } while ( state == GameState.FINISHED );
         }
         
@@ -338,22 +338,24 @@ public class GameWorld extends EngineFrame {
         
     }
     
-    private void checkFinished() {
+    private void checkFinishedAndChangeState() {
+        state = checkFinished() ? GameState.FINISHED : state;
+    }
+    
+    private boolean checkFinished() {
         
-        boolean finished = true;
         int k = 0;
         
         for ( int i = 0; i < SIZE; i++ ) {
             for ( int j = 0; j < SIZE; j++ ) {
                 if ( pieces[i][j] != null && pieces[i][j].getValue() != k ) {
-                    finished = false;
-                    return;
+                    return false;
                 }
                 k++;
             }
         }
         
-        state = finished ? GameState.FINISHED : state;
+        return true;
         
     }
     
