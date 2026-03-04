@@ -60,21 +60,12 @@ public class Piece {
         return pos;
     }
     
-    public Vector2 getDim() {
-        return dim;
-    }
-    
     public int getValue() {
         return value;
     }
     
     public String getStringValue() {
         return stringValue;
-    }
-
-    @Override
-    public String toString() {
-        return "Piece{" + "value=" + value + ", pos=" + pos + '}';
     }
     
 }

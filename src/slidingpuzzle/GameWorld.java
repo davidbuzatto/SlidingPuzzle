@@ -25,6 +25,7 @@ public class GameWorld extends EngineFrame {
     //private static final int SHUFFLE_COUNT = SIZE * SIZE * SIZE;
     private static final int SHUFFLE_COUNT = SIZE * SIZE;
     private static final boolean DRAW_VALUES = false;
+    private static final int MAX_RECURSION_DEPTH = 10000;
     
     private static final int[] NEIGHBOR_ROWS = { 0, 1, 0, -1 };
     private static final int[] NEIGHBOR_COLS = { 1, 0, -1, 0 };
@@ -34,9 +35,9 @@ public class GameWorld extends EngineFrame {
     private int fontSize;
     private Image image;
     
-    private boolean finished;
     private GameState state;
     
+    // for move animation
     private double xAnimStart;
     private double yAnimStart;
     private double xAnimEnd;
@@ -45,7 +46,10 @@ public class GameWorld extends EngineFrame {
     private double movePieceAnimationTime;
     private double movePieceAnimationCounter;
     
+    // for automatic solving
     private boolean stopSolving;
+    private int currentRecursionDepth;
+    private boolean reachedMaxRecursionDepth;
     private Set<String> visitedStates;
     private Deque<Vector2> solutionMoves;
     private boolean runningSolution;
@@ -72,7 +76,13 @@ public class GameWorld extends EngineFrame {
         
         for ( int i = 0; i < SIZE; i++ ) {
             for ( int j = 0; j < SIZE; j++ ) {
-                pieces[i][j] = new Piece( i * SIZE + j, j * pieceWidth, i * pieceWidth, pieceWidth, image );
+                pieces[i][j] = new Piece( 
+                    i * SIZE + j, 
+                    j * pieceWidth, 
+                    i * pieceWidth, 
+                    pieceWidth,
+                    image
+                );
             }
         }
         
@@ -129,47 +139,57 @@ public class GameWorld extends EngineFrame {
         }
         
         if ( isKeyPressed( KEY_R ) ) {
-            runningSolution = false;
-            solutionMoves.clear();
-            do {
-                shufflePieces( SHUFFLE_COUNT );
-                state = GameState.PLAYING;
-                checkFinishedAndChangeState();
-            } while ( state == GameState.FINISHED );
+            reachedMaxRecursionDepth = false;
+            performSuffle();
         }
         
         if ( isKeyPressed( KEY_S ) ) {
             
-            do {
-                shufflePieces( SHUFFLE_COUNT );
-                state = GameState.PLAYING;
-                checkFinishedAndChangeState();
-            } while ( state == GameState.FINISHED );
-            
-            // store current state
-            Piece[][] currentPieces = new Piece[SIZE][SIZE];
-            for ( int i = 0; i < SIZE; i++ ) {
-                for ( int j = 0; j < SIZE; j++ ) {
-                    currentPieces[i][j] = pieces[i][j];
-                }
-            }
-            
-            // solving...
-            solve();
-            
-            // restore state before solving
-            for ( int i = 0; i < SIZE; i++ ) {
-                for ( int j = 0; j < SIZE; j++ ) {
-                    if ( pieces[i][j] != null ) {
-                        pieces[i][j] = currentPieces[i][j];
-                        pieces[i][j].setPos( j * pieces[i][j].getDim().x, i * pieces[i][j].getDim().y );
+            try {
+                
+                performSuffle();
+
+                // store current state
+                Piece[][] currentPieces = new Piece[SIZE][SIZE];
+                for ( int i = 0; i < SIZE; i++ ) {
+                    for ( int j = 0; j < SIZE; j++ ) {
+                        currentPieces[i][j] = pieces[i][j];
                     }
                 }
+
+                // solving...
+                solve();
+
+                // restore state before solving execution
+                for ( int i = 0; i < SIZE; i++ ) {
+                    for ( int j = 0; j < SIZE; j++ ) {
+                        if ( pieces[i][j] != null ) {
+                            pieces[i][j] = currentPieces[i][j];
+                            pieces[i][j].setPos( j * pieceWidth, i * pieceWidth );
+                        }
+                    }
+                }
+
+                totalMovements = solutionMoves.size();
+                runningSolution = true;
+                
+            } catch ( IllegalStateException exc ) {
+                reachedMaxRecursionDepth = true;
+                performSuffle();
             }
             
-            totalMovements = solutionMoves.size();
-            runningSolution = true;
-            
+        }
+        
+        double m = getMouseWheelMove();
+        if ( m > 0 ) {
+            movePieceAnimationTime -= 0.05;
+            if ( movePieceAnimationTime < 0.016 ) {
+                movePieceAnimationTime = 0.016;
+            }
+        } else if ( m < 0 ) {
+            if ( movePieceAnimationTime < 5.0 ) {
+                movePieceAnimationTime += 0.05;
+            }
         }
         
     }
@@ -195,8 +215,8 @@ public class GameWorld extends EngineFrame {
                         Rectangle textBounds = measureTextBounds( p.getStringValue(), fontSize );
                         drawText( 
                             p.getStringValue(), 
-                            p.getPos().x + p.getDim().x / 2 - textBounds.width / 2, 
-                            p.getPos().y + p.getDim().y / 2 - textBounds.height / 4, 
+                            p.getPos().x + pieceWidth / 2 - textBounds.width / 2, 
+                            p.getPos().y + pieceWidth / 2 - textBounds.height / 4, 
                             fontSize, 
                             WHITE
                         );
@@ -206,10 +226,13 @@ public class GameWorld extends EngineFrame {
         }
         
         if ( state == GameState.START || state == GameState.FINISHED ) {
+            
             fillRectangle( 0, 0, getScreenWidth(), getScreenHeight(), ColorUtils.fade( BLACK, 0.5 ) );
             int messageFontSize = 60;
+            
             String wonMessage = state == GameState.FINISHED ? "You Won!" : "Let's Play!";
             String restartMessage = state == GameState.FINISHED ? "Press <R> to Shuffle!" : "Press <R> to Start!";
+            
             drawText( 
                 wonMessage, 
                 getScreenWidth() / 2 - measureText( wonMessage, messageFontSize ) / 2, 
@@ -217,6 +240,7 @@ public class GameWorld extends EngineFrame {
                 messageFontSize, 
                 state == GameState.FINISHED ? BLUE : GREEN
             );
+            
             drawText( 
                 restartMessage, 
                 getScreenWidth() / 2 - measureText( restartMessage, messageFontSize / 2 ) / 2, 
@@ -224,10 +248,16 @@ public class GameWorld extends EngineFrame {
                 messageFontSize / 2, 
                 WHITE
             );
+            
         }
         
         if ( runningSolution ) {
             drawText( String.format( "%d/%d", totalMovements - solutionMoves.size(), totalMovements ), 10, 10, 20, GREEN );
+        }
+        
+        if ( reachedMaxRecursionDepth ) {
+            fillRectangle( 0, 0, getScreenWidth(), getScreenHeight(), ColorUtils.fade( BLACK, 0.5 ) );
+            drawText( String.format( "Reached the maximum recursion depth (%d)...\nTry again!", MAX_RECURSION_DEPTH ), 10, 10, 20, RED );
         }
     
     }
@@ -248,10 +278,10 @@ public class GameWorld extends EngineFrame {
             pieces[targetRow][targetCol] = p;
             pieces[row][col] = null;
             
-            xAnimStart = col * p.getDim().x;
-            yAnimStart = row * p.getDim().y;
-            xAnimEnd = targetCol * p.getDim().x;
-            yAnimEnd = targetRow * p.getDim().y;
+            xAnimStart = col * pieceWidth;
+            yAnimStart = row * pieceWidth;
+            xAnimEnd = targetCol * pieceWidth;
+            yAnimEnd = targetRow * pieceWidth;
             
             movingPiece = p;
             
@@ -271,7 +301,7 @@ public class GameWorld extends EngineFrame {
         if ( targetRow != -1 ) {
             
             Piece p = pieces[row][col];
-            p.setPos( targetCol * p.getDim().x, targetRow * p.getDim().y );
+            p.setPos( targetCol * pieceWidth, targetRow * pieceWidth );
             
             pieces[targetRow][targetCol] = p;
             pieces[row][col] = null;
@@ -280,7 +310,7 @@ public class GameWorld extends EngineFrame {
         
     }
     
-    // gets the empty pos based in a piece position
+    // gets the empty position based in a piece position
     private Vector2 getEmptyPos( int row, int col ) {
         
         Vector2 pos = new Vector2( -1, -1 );
@@ -301,6 +331,7 @@ public class GameWorld extends EngineFrame {
         
     }
     
+    // get the empty position
     private Vector2 getEmptyPos() {
         
         int row = -1;
@@ -321,6 +352,8 @@ public class GameWorld extends EngineFrame {
         
     }
     
+    // based in the empty position, get all surrounding positions
+    // that can be moved
     private List<Vector2> getCandidatesToMove() {
         
         List<Vector2> candidates = new ArrayList<>();
@@ -340,8 +373,20 @@ public class GameWorld extends EngineFrame {
         
     }
     
+    private void performSuffle() {
+        runningSolution = false;
+        solutionMoves.clear();
+        do {
+            shufflePieces( SHUFFLE_COUNT );
+            state = GameState.PLAYING;
+            checkFinishedAndChangeState();
+        } while ( state == GameState.FINISHED );
+    }
+    
+    // suffle pieces applying "count" movements
     private void shufflePieces( int count ) {
         
+        // perform the suffle
         for ( int i = 0; i < count; i++ ) {
             List<Vector2> candidates = getCandidatesToMove();
             int p = MathUtils.getRandomValue( 0, candidates.size() - 1 );
@@ -349,6 +394,7 @@ public class GameWorld extends EngineFrame {
             movePieceToEmptyPos( (int) pp.y, (int) pp.x );
         }
         
+        // returns the empty position to the bottom right corner
         Vector2 nullPos = getEmptyPos();
         int row = (int) nullPos.y;
         int col = (int) nullPos.x;
@@ -364,40 +410,6 @@ public class GameWorld extends EngineFrame {
         for ( int i = 0; i < qCol; i++ ) {
             movePieceToEmptyPos( row, col + 1 );
             col++;
-        }
-        
-    }
-    
-    private void shufflePiecesMaybeUnsolvable() {
-        
-        for ( int i = 0; i < SIZE; i++ ) {
-            for ( int j = 0; j < SIZE; j++ ) {
-                int ri = MathUtils.getRandomValue( 0, SIZE - 1 );
-                int rj = MathUtils.getRandomValue( 0, SIZE - 1 );
-                Piece t = pieces[i][j];
-                pieces[i][j] = pieces[ri][rj];
-                pieces[ri][rj] = t;
-            }
-        }
-        
-        setNullPiece:
-        for ( int i = 0; i < SIZE; i++ ) {
-            for ( int j = 0; j < SIZE; j++ ) {
-                if ( pieces[i][j] == null ) {
-                    pieces[i][j] = pieces[SIZE-1][SIZE-1];
-                    pieces[SIZE-1][SIZE-1] = null;
-                    break setNullPiece;
-                }
-            }
-        }
-        
-        for ( int i = 0; i < SIZE; i++ ) {
-            for ( int j = 0; j < SIZE; j++ ) {
-                Piece p = pieces[i][j];
-                if ( p != null ) {
-                    p.setPos( j * p.getDim().x, i * p.getDim().y );
-                }
-            }
         }
         
     }
@@ -423,15 +435,20 @@ public class GameWorld extends EngineFrame {
         
     }
     
-    private void solve() {
+    // perform the solve algorithm
+    private void solve() throws IllegalStateException {
         
         stopSolving = false;
+        currentRecursionDepth = 0;
+        reachedMaxRecursionDepth = false;
         visitedStates.clear();
         solutionMoves.clear();
         
+        // stores the initial state
         String initialState = getCurrentBoardState();
         visitedStates.add( initialState );
         
+        // get the initial moving candidates
         List<Vector2> candidates = getCandidatesToMove();
         
         for ( Vector2 c : candidates ) {
@@ -443,16 +460,25 @@ public class GameWorld extends EngineFrame {
         
     }
     
-    private boolean solveRecurive( Vector2 pos ) {
+    // perform the solve algorithm using backtracking based in a position
+    private boolean solveRecurive( Vector2 pos ) throws IllegalStateException {
         
+        currentRecursionDepth++;
+        
+        if ( currentRecursionDepth > MAX_RECURSION_DEPTH ) {
+            stopSolving = true;
+            throw new IllegalStateException( "reached max recursion depth!" );
+        }
+        
+        // stop trying to solve
         if ( stopSolving ) {
             return false;
         }
         
-        // for backtracking
+        // for backtracking, stores the backward movement before starting
         Vector2 backward = getEmptyPos( (int) pos.y, (int) pos.x );
         
-        // move
+        // move the current piece to the empty space
         movePieceToEmptyPos( (int) pos.y, (int) pos.x );
         
         // adds to the solutions (maybe will need to remove)
@@ -461,24 +487,33 @@ public class GameWorld extends EngineFrame {
         // get the current state
         String currentState = getCurrentBoardState();
         
-        // already visited?
+        // this state was already processed?
         if ( visitedStates.contains( currentState ) ) {
+            
             // undo movement
             movePieceToEmptyPos( (int) backward.y, (int) backward.x );
-            solutionMoves.removeLast(); // the current pos is not correct
+            
+            // remove the move, because it is not correct
+            solutionMoves.removeLast();
+            
+            // stop the current solution try
             return false;
+            
         }
         
-        // add state
+        // ok, this movement shows promise!
+        
+        // add the state
         visitedStates.add( currentState );
         
         // checks solution
         if ( checkFinished() ) {
+            // solution found, stop and signals other calls to stop
             stopSolving = true;
-            return true;  // solution found!
+            return true;
         }
         
-        // recursion
+        // recursion, trying to find the solution in subproblems
         List<Vector2> candidates = getCandidatesToMove();
         for ( Vector2 c : candidates ) {
             if ( solveRecurive( c ) ) {
@@ -486,16 +521,20 @@ public class GameWorld extends EngineFrame {
             }
         }
         
-        // backtracking
+        // no solution found in subproblems, so the current path for
+        // problem solving is incorret
         movePieceToEmptyPos( (int) backward.y, (int) backward.x );
-        visitedStates.remove( currentState );
-        solutionMoves.removeLast(); // the current pos is not correct
+        //visitedStates.remove( currentState );
+        solutionMoves.removeLast();
+        
+        currentRecursionDepth--;
         
         // theres no path from here
         return false;
         
     }
     
+    // creates a string for the current board state representation
     private String getCurrentBoardState() {
         StringBuilder sb = new StringBuilder();
         for ( int i = 0; i < SIZE; i++ ) {
